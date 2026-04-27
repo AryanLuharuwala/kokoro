@@ -165,13 +165,83 @@ python -m voice_lab speak \
 * `--parameterization per-length`: full `[510, 256]` tensor. Higher
   capacity, but probably overkill for one voice.
 
-## Limitations
+## Fine-tuning model weights (heavier path)
+
+`voice_lab fit` only optimizes the 256-d style vector. To actually update
+the Kokoro-82M model weights:
+
+```bash
+python -m voice_lab finetune \
+    --manifest data/shinchan/manifest.jsonl \
+    --out-dir checkpoints/shinchan \
+    --lang h \
+    --preset voice \
+    --epochs 20 \
+    --val-sentence "नमस्ते, मैं शिनचान हूँ।"
+```
+
+Or set `[finetune].enabled = true` in the TOML config and rerun
+`voice_lab pipeline`.
+
+**Presets** (which weights are trainable):
+
+* `style_only` — same as `voice_lab fit`; only the 256-d style.
+* `voice` — recommended. Trains `bert_encoder`, `text_encoder`, decoder,
+  and the F0/N branches of the prosody predictor. Keeps BERT frozen.
+* `full` — every parameter (note: duration LSTM/proj will still receive
+  zero gradient, see below).
+
+**Loss:** multi-resolution log-mel L1 + multi-resolution STFT magnitude
+loss (Yamamoto-style spectral convergence + log-mag L1). The STFT loss is
+weighted lower (default 0.5) but matters: without a vocoder discriminator
+it's the main thing keeping the decoder from drifting toward muffled
+output.
+
+**Outputs:**
+
+* `<out-dir>/sample_epochNNN.wav` after each validation epoch — listen!
+* `<out-dir>/ckpt_epochNNN.pth` every `save_every_epochs`.
+* `<out-dir>/kokoro-finetuned.pth` + `config.json` at the end. Load with
+  `KModel(config="<out-dir>/config.json", model="<out-dir>/kokoro-finetuned.pth")`.
+
+### Known limits of this fine-tuner
+
+* **Duration won't change.** The forward pass uses `torch.round` on
+  predicted duration before building the alignment matrix, which blocks
+  gradient flow into the duration LSTM and projection. Cadence stays close
+  to whatever the pretrained model produces. (Original StyleTTS2 trains
+  duration with MFA-aligned targets — out of scope here.)
+* **No discriminator.** Mel + STFT-magnitude losses preserve spectral
+  shape but don't enforce perceptual realism the way HiFi-GAN-style
+  adversarial training does. Keep epochs modest (10–30) and watch the
+  validation samples for muffling.
+* **No SLM / WavLM loss.** Same reason — the auxiliary models from
+  Kokoro's original training pipeline aren't open-sourced.
+* **Limited Hindi support upstream.** Kokoro ships only `hf_alpha`,
+  `hf_beta`, `hm_omega`, `hm_psi` for Hindi. Fine-tuning extends one of
+  them toward Shinchan; some phonemes may still be weak.
+
+### When to use a heavier setup instead
+
+If this fine-tuner's quality ceiling isn't enough, the community paths
+that use the full StyleTTS2 training stack (with discriminator, SLM, JDC,
+ASR aligner) are:
+
+* [`semidark/kokoro-deutsch`](https://github.com/semidark/kokoro-deutsch)
+  — a Kokoro-specific recipe with weight conversion and two-stage
+  training. Closest to "real Kokoro fine-tuning".
+* [`IIEleven11/StyleTTS2FineTune`](https://github.com/IIEleven11/StyleTTS2FineTune)
+  — single-voice wrapper around StyleTTS2's official `train_finetune.py`.
+  Loses Kokoro's prior (starts from StyleTTS2-LibriTTS) but is the
+  best-documented end-to-end recipe.
+
+## Limitations of the embedding path
 
 * The model can never produce a phoneme it wasn't trained to produce. Hindi
   voices in stock Kokoro are limited; some Shinchan-isms may not transfer.
 * Fitting only the style vector cannot change duration distributions much,
   because duration is jointly determined by text + style + frozen weights.
   Severe pacing differences would need actual fine-tuning of the model
-  weights (see project root TODO for the architecture-shrink path).
+  weights (see "Fine-tuning model weights" above).
 * If your transcripts are wrong, the loss will fight the text encoder. Use
   clean transcripts.

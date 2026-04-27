@@ -11,16 +11,22 @@ __all__ = [
     "blend_voices",
     "save_voice_pack",
     "MultiResMelLoss",
+    "MultiResSTFTLoss",
     "VoiceDataset",
     "StyleOptimizer",
+    "Finetuner",
+    "FinetuneConfig",
 ]
 
 _LAZY = {
     "blend_voices": ("voice_lab.blend", "blend_voices"),
     "save_voice_pack": ("voice_lab.blend", "save_voice_pack"),
     "MultiResMelLoss": ("voice_lab.losses", "MultiResMelLoss"),
+    "MultiResSTFTLoss": ("voice_lab.losses", "MultiResSTFTLoss"),
     "VoiceDataset": ("voice_lab.data", "VoiceDataset"),
     "StyleOptimizer": ("voice_lab.optimize", "StyleOptimizer"),
+    "Finetuner": ("voice_lab.finetune", "Finetuner"),
+    "FinetuneConfig": ("voice_lab.finetune", "FinetuneConfig"),
 }
 
 

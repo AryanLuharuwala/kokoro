@@ -12,6 +12,9 @@ Subcommands::
                                        --out shinchan_hello.wav
     python -m voice_lab build-dataset  --config voice_lab/examples/shinchan_hindi.toml
     python -m voice_lab pipeline       --config voice_lab/examples/shinchan_hindi.toml
+    python -m voice_lab finetune       --manifest data/shinchan/manifest.jsonl \
+                                       --out-dir checkpoints/shinchan \
+                                       --lang h --preset voice --epochs 20
 """
 
 from __future__ import annotations
@@ -68,6 +71,40 @@ def cmd_fit(args: argparse.Namespace) -> int:
     opt.fit()
     out = opt.export(args.out)
     print(f"wrote {out}")
+    return 0
+
+
+def cmd_finetune(args: argparse.Namespace) -> int:
+    from kokoro import KPipeline
+
+    from .data import VoiceDataset
+    from .finetune import FinetuneConfig, Finetuner
+
+    pipeline = KPipeline(lang_code=args.lang, device=args.device)
+    dataset = VoiceDataset(args.manifest)
+    cfg = FinetuneConfig(
+        preset=args.preset,
+        epochs=args.epochs,
+        lr=args.lr,
+        weight_decay=args.weight_decay,
+        warmup_steps=args.warmup_steps,
+        mel_weight=args.mel_weight,
+        stft_weight=args.stft_weight,
+        train_style=not args.no_train_style,
+        init_voice=args.init_voice,
+        init_blend=_parse_weights(args.init_blend) if args.init_blend else None,
+        val_every_epochs=args.val_every,
+        save_every_epochs=args.save_every,
+        val_sentence=args.val_sentence,
+        out_dir=str(args.out_dir),
+        final_pth=str(args.out_dir / "kokoro-finetuned.pth"),
+        final_voice=str(args.out_dir / "voice.pt"),
+    )
+    ft = Finetuner(pipeline, dataset, cfg)
+    ft.fit()
+    out = ft.export_final()
+    for k, v in out.items():
+        print(f"{k}: {v}")
     return 0
 
 
@@ -138,6 +175,36 @@ def build_parser() -> argparse.ArgumentParser:
     f.add_argument("--init-blend", type=str, default=None)
     f.add_argument("--device", type=str, default=None)
     f.set_defaults(func=cmd_fit)
+
+    ft = sub.add_parser(
+        "finetune",
+        help="Fine-tune Kokoro model weights on a single voice (mel + multi-res STFT loss)",
+    )
+    ft.add_argument("--manifest", type=Path, required=True)
+    ft.add_argument("--out-dir", type=Path, required=True)
+    ft.add_argument("--lang", type=str, default="h")
+    ft.add_argument(
+        "--preset", choices=["style_only", "voice", "full"], default="voice"
+    )
+    ft.add_argument("--epochs", type=int, default=20)
+    ft.add_argument("--lr", type=float, default=1e-4)
+    ft.add_argument("--weight-decay", type=float, default=1e-6)
+    ft.add_argument("--warmup-steps", type=int, default=100)
+    ft.add_argument("--mel-weight", type=float, default=1.0)
+    ft.add_argument("--stft-weight", type=float, default=0.5)
+    ft.add_argument("--no-train-style", action="store_true")
+    ft.add_argument("--init-voice", type=str, default="hm_psi")
+    ft.add_argument("--init-blend", type=str, default=None)
+    ft.add_argument("--val-every", type=int, default=1)
+    ft.add_argument("--save-every", type=int, default=5)
+    ft.add_argument(
+        "--val-sentence",
+        type=str,
+        default=None,
+        help="Synthesize this after each validation epoch (saved to out-dir)",
+    )
+    ft.add_argument("--device", type=str, default=None)
+    ft.set_defaults(func=cmd_finetune)
 
     bd = sub.add_parser(
         "build-dataset",

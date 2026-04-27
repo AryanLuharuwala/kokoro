@@ -12,6 +12,13 @@ CLI: ``python -m voice_lab build-dataset --config dataset.toml``
 """
 
 from .config import PipelineConfig, load_config
-from .pipeline import build_dataset, fit_voice, run
+from .pipeline import build_dataset, finetune_model, fit_voice, run
 
-__all__ = ["PipelineConfig", "load_config", "build_dataset", "fit_voice", "run"]
+__all__ = [
+    "PipelineConfig",
+    "load_config",
+    "build_dataset",
+    "fit_voice",
+    "finetune_model",
+    "run",
+]

@@ -114,13 +114,56 @@ def fit_voice(cfg: PipelineConfig) -> Path:
     return opt.export(cfg.fit.out)
 
 
+def finetune_model(cfg: PipelineConfig) -> dict:
+    """Fine-tune model weights using the manifest from build_dataset."""
+    if not cfg.manifest_path.exists():
+        raise RuntimeError(f"manifest not found: {cfg.manifest_path}")
+
+    from kokoro import KPipeline
+
+    from ..data import VoiceDataset
+    from ..finetune import FinetuneConfig as FtCfg, Finetuner
+
+    pipeline = KPipeline(lang_code=cfg.language, device=cfg.asr.device)
+    dataset = VoiceDataset(cfg.manifest_path)
+    ft_cfg = FtCfg(
+        preset=cfg.finetune.preset,
+        epochs=cfg.finetune.epochs,
+        lr=cfg.finetune.lr,
+        weight_decay=cfg.finetune.weight_decay,
+        grad_clip=cfg.finetune.grad_clip,
+        warmup_steps=cfg.finetune.warmup_steps,
+        mel_weight=cfg.finetune.mel_weight,
+        stft_weight=cfg.finetune.stft_weight,
+        train_style=cfg.finetune.train_style,
+        style_lr_scale=cfg.finetune.style_lr_scale,
+        parameterization=cfg.finetune.parameterization,
+        init_voice=cfg.finetune.init_voice,
+        init_blend=cfg.finetune.init_blend,
+        val_every_epochs=cfg.finetune.val_every_epochs,
+        save_every_epochs=cfg.finetune.save_every_epochs,
+        val_sentence=cfg.finetune.val_sentence,
+        out_dir=cfg.finetune.out_dir,
+        final_pth=cfg.finetune.final_pth,
+        final_voice=cfg.finetune.final_voice,
+    )
+    ft = Finetuner(pipeline, dataset, ft_cfg)
+    ft.fit()
+    return {k: str(v) for k, v in ft.export_final().items()}
+
+
 def run(cfg: PipelineConfig) -> dict:
-    """Build the dataset and (if enabled) fit the voice."""
+    """Build the dataset, then optionally fit a voice and/or fine-tune."""
     manifest = build_dataset(cfg)
-    out = {"manifest": manifest}
+    out: dict = {"manifest": manifest}
     if cfg.fit.enabled:
         print(f"[fit] training voice -> {cfg.fit.out}")
         out["voice_pack"] = fit_voice(cfg)
     else:
-        print("[fit] disabled in config; stopping after manifest")
+        print("[fit] disabled in config")
+    if cfg.finetune.enabled:
+        print(f"[finetune] preset={cfg.finetune.preset} -> {cfg.finetune.final_pth}")
+        out["finetune"] = finetune_model(cfg)
+    else:
+        print("[finetune] disabled in config")
     return out

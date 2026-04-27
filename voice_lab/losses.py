@@ -127,3 +127,65 @@ class MultiResMelLoss(nn.Module):
         for mel in self.mels:
             loss = loss + F.l1_loss(mel(g), mel(t))
         return loss / len(self.mels)
+
+
+class MultiResSTFTLoss(nn.Module):
+    """Multi-resolution STFT magnitude loss (Yamamoto et al., 2020).
+
+    Two terms per resolution: a spectral convergence loss and a log-magnitude
+    L1 loss. Operates on the raw waveform STFT (not mel), so it captures the
+    high-frequency detail that mel-only losses lose. Without a vocoder
+    discriminator this helps prevent decoder muffling during fine-tuning.
+    """
+
+    def __init__(
+        self,
+        n_ffts: Sequence[int] = (512, 1024, 2048),
+        hop_ratios: Sequence[float] = (0.25, 0.25, 0.25),
+        log_eps: float = 1e-7,
+    ):
+        super().__init__()
+        if len(n_ffts) != len(hop_ratios):
+            raise ValueError("n_ffts and hop_ratios must have the same length")
+        self.n_ffts = list(n_ffts)
+        self.hops = [int(n * r) for n, r in zip(n_ffts, hop_ratios)]
+        self.log_eps = log_eps
+        for n in self.n_ffts:
+            self.register_buffer(
+                f"win_{n}", torch.hann_window(n), persistent=False
+            )
+
+    def _stft_mag(self, wav: torch.Tensor, n_fft: int, hop: int) -> torch.Tensor:
+        win = getattr(self, f"win_{n_fft}").to(wav.device)
+        spec = torch.stft(
+            wav,
+            n_fft=n_fft,
+            hop_length=hop,
+            win_length=n_fft,
+            window=win,
+            center=True,
+            pad_mode="reflect",
+            return_complex=True,
+        )
+        return spec.abs()
+
+    def forward(self, generated: torch.Tensor, target: torch.Tensor) -> torch.Tensor:
+        n = min(generated.shape[-1], target.shape[-1])
+        g = generated[..., :n]
+        t = target[..., :n]
+        if g.dim() == 1:
+            g = g.unsqueeze(0)
+            t = t.unsqueeze(0)
+        sc, mag = g.new_tensor(0.0), g.new_tensor(0.0)
+        for n_fft, hop in zip(self.n_ffts, self.hops):
+            G = self._stft_mag(g, n_fft, hop)
+            T = self._stft_mag(t, n_fft, hop)
+            # Spectral convergence
+            sc = sc + torch.norm(T - G, p="fro") / (torch.norm(T, p="fro") + self.log_eps)
+            # Log magnitude L1
+            mag = mag + F.l1_loss(
+                torch.log(G.clamp_min(self.log_eps)),
+                torch.log(T.clamp_min(self.log_eps)),
+            )
+        n_res = len(self.n_ffts)
+        return (sc + mag) / n_res

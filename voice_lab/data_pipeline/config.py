@@ -88,6 +88,30 @@ class FitConfig:
 
 
 @dataclass
+class FinetuneConfig:
+    enabled: bool = False
+    preset: str = "voice"
+    epochs: int = 20
+    lr: float = 1e-4
+    weight_decay: float = 1e-6
+    grad_clip: float = 1.0
+    warmup_steps: int = 100
+    mel_weight: float = 1.0
+    stft_weight: float = 0.5
+    train_style: bool = True
+    style_lr_scale: float = 10.0
+    parameterization: str = "shared"
+    init_voice: Optional[str] = "hm_psi"
+    init_blend: Optional[dict] = None
+    val_every_epochs: int = 1
+    save_every_epochs: int = 5
+    val_sentence: Optional[str] = None
+    out_dir: str = "checkpoints/shinchan"
+    final_pth: str = "checkpoints/shinchan/kokoro-shinchan.pth"
+    final_voice: str = "voices/shinchan.pt"
+
+
+@dataclass
 class PipelineConfig:
     output_dir: Path
     language: str
@@ -95,6 +119,7 @@ class PipelineConfig:
     segmentation: SegmentationConfig = field(default_factory=SegmentationConfig)
     asr: AsrConfig = field(default_factory=AsrConfig)
     fit: FitConfig = field(default_factory=FitConfig)
+    finetune: FinetuneConfig = field(default_factory=FinetuneConfig)
 
     @property
     def raw_dir(self) -> Path:
@@ -136,6 +161,7 @@ def load_config(path: str | Path) -> PipelineConfig:
     segmentation = _coerce(SegmentationConfig, raw.get("segmentation", {}))
     asr = _coerce(AsrConfig, raw.get("asr", {}))
     fit = _coerce(FitConfig, raw.get("fit", {}))
+    finetune = _coerce(FinetuneConfig, raw.get("finetune", {}))
     return PipelineConfig(
         output_dir=Path(raw["output_dir"]),
         language=raw.get("language", "hi"),
@@ -143,4 +169,5 @@ def load_config(path: str | Path) -> PipelineConfig:
         segmentation=segmentation,
         asr=asr,
         fit=fit,
+        finetune=finetune,
     )
