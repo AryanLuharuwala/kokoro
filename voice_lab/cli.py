@@ -2,14 +2,16 @@
 
 Subcommands::
 
-    python -m voice_lab blend  --weights hm_psi=0.5,hf_alpha=0.4,hf_beta=0.1 \
-                              --out voices/shinchan_seed.pt
-    python -m voice_lab fit    --manifest data/shinchan/manifest.jsonl \
-                              --lang h --init-voice hm_psi --epochs 50 \
-                              --out voices/shinchan.pt
-    python -m voice_lab speak  --voice voices/shinchan.pt --lang h \
-                              --text "नमस्ते, मैं शिनचान हूँ।" \
-                              --out shinchan_hello.wav
+    python -m voice_lab blend          --weights hm_psi=0.5,hf_alpha=0.4,hf_beta=0.1 \
+                                       --out voices/shinchan_seed.pt
+    python -m voice_lab fit            --manifest data/shinchan/manifest.jsonl \
+                                       --lang h --init-voice hm_psi --epochs 50 \
+                                       --out voices/shinchan.pt
+    python -m voice_lab speak          --voice voices/shinchan.pt --lang h \
+                                       --text "नमस्ते, मैं शिनचान हूँ।" \
+                                       --out shinchan_hello.wav
+    python -m voice_lab build-dataset  --config voice_lab/examples/shinchan_hindi.toml
+    python -m voice_lab pipeline       --config voice_lab/examples/shinchan_hindi.toml
 """
 
 from __future__ import annotations
@@ -69,6 +71,25 @@ def cmd_fit(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_build_dataset(args: argparse.Namespace) -> int:
+    from .data_pipeline import load_config, build_dataset
+
+    cfg = load_config(args.config)
+    manifest = build_dataset(cfg)
+    print(f"manifest: {manifest}")
+    return 0
+
+
+def cmd_pipeline(args: argparse.Namespace) -> int:
+    from .data_pipeline import load_config, run
+
+    cfg = load_config(args.config)
+    out = run(cfg)
+    for k, v in out.items():
+        print(f"{k}: {v}")
+    return 0
+
+
 def cmd_speak(args: argparse.Namespace) -> int:
     import soundfile as sf
 
@@ -117,6 +138,20 @@ def build_parser() -> argparse.ArgumentParser:
     f.add_argument("--init-blend", type=str, default=None)
     f.add_argument("--device", type=str, default=None)
     f.set_defaults(func=cmd_fit)
+
+    bd = sub.add_parser(
+        "build-dataset",
+        help="Download YouTube audio, segment Shinchan-pitch clips, ASR, write manifest",
+    )
+    bd.add_argument("--config", type=Path, required=True)
+    bd.set_defaults(func=cmd_build_dataset)
+
+    pp = sub.add_parser(
+        "pipeline",
+        help="Run build-dataset then fit (full YouTube -> voice pack pipeline)",
+    )
+    pp.add_argument("--config", type=Path, required=True)
+    pp.set_defaults(func=cmd_pipeline)
 
     s = sub.add_parser("speak", help="Synthesize text using a voice pack")
     s.add_argument("--voice", type=str, required=True, help="voice name or .pt path")

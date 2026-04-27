@@ -1,0 +1,49 @@
+# Example config for the Shinchan (Hindi dub) voice training pipeline.
+#
+# Run with:
+#   python -m voice_lab pipeline --config voice_lab/examples/shinchan_hindi.toml
+#
+# Re-running is incremental: anything already downloaded / segmented /
+# transcribed is reused.
+
+output_dir = "data/shinchan"
+language   = "hi"
+
+# Add as many [[sources]] entries as you like. Replace these with real
+# Hindi-dub Shinchan clips you have permission to use.
+[[sources]]
+url = "https://www.youtube.com/watch?v=REPLACE_ME_1"
+# Skip intro / outro music if needed:
+# start_offset = 30
+# end_offset   = 30
+
+[[sources]]
+url = "https://www.youtube.com/watch?v=REPLACE_ME_2"
+
+[segmentation]
+# "pitch": keep VAD regions whose median F0 is in [min_f0, max_f0]
+#          (Shinchan sits ~250-400 Hz; adult speakers sit lower).
+# "all":   keep every VAD region (no pitch filter; useful for debugging).
+method             = "pitch"
+min_f0             = 220.0   # Hz
+max_f0             = 450.0   # Hz
+min_duration       = 1.5     # seconds
+max_duration       = 10.0    # seconds
+vad_threshold      = 0.5     # Silero VAD threshold
+min_in_range_ratio = 0.6     # fraction of voiced frames in [min_f0, max_f0]
+
+[asr]
+model        = "small"   # "tiny" | "base" | "small" | "medium" | "large-v3"
+language     = "hi"
+device       = "cuda"    # "cpu" if no GPU
+compute_type = "float16" # ignored on CPU
+beam_size    = 5
+min_chars    = 3         # drop transcripts shorter than this
+
+[fit]
+enabled         = true
+init_voice      = "hm_psi"   # warm-start from the closest Hindi voice
+parameterization = "shared"  # "shared" (single 256-d vec) or "per-length" ([510,256])
+epochs          = 50
+lr              = 1e-2
+out             = "voices/shinchan.pt"

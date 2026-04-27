@@ -31,6 +31,13 @@ training = [
     "soundfile",
     "resampy",
 ]
+dataset = [
+    "soundfile",
+    "resampy",
+    "yt-dlp",
+    "librosa",
+    "faster-whisper",
+]
 
 [project.scripts]
 kokoro = "kokoro.__main__:main"
@@ -39,6 +46,9 @@ voice-lab = "voice_lab.cli:main"
 [tool.hatch.build.targets.wheel]
 only-include = ["kokoro", "voice_lab"]
 only-packages = true
+
+[tool.hatch.build.targets.wheel.force-include]
+"voice_lab/examples/shinchan_hindi.toml" = "voice_lab/examples/shinchan_hindi.toml"
 
 [project.urls]
 Homepage = "https://github.com/hexgrad/kokoro"
