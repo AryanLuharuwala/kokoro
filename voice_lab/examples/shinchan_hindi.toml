@@ -1,0 +1,71 @@
+# Example config for the Shinchan (Hindi dub) voice training pipeline.
+#
+# Run with:
+#   python -m voice_lab pipeline --config voice_lab/examples/shinchan_hindi.toml
+#
+# Re-running is incremental: anything already downloaded / segmented /
+# transcribed is reused.
+
+output_dir = "data/shinchan"
+language   = "hi"
+
+# Add as many [[sources]] entries as you like. Replace these with real
+# Hindi-dub Shinchan clips you have permission to use.
+[[sources]]
+url = "https://www.youtube.com/watch?v=REPLACE_ME_1"
+# Skip intro / outro music if needed:
+# start_offset = 30
+# end_offset   = 30
+
+[[sources]]
+url = "https://www.youtube.com/watch?v=REPLACE_ME_2"
+
+[segmentation]
+# "pitch": keep VAD regions whose median F0 is in [min_f0, max_f0]
+#          (Shinchan sits ~250-400 Hz; adult speakers sit lower).
+# "all":   keep every VAD region (no pitch filter; useful for debugging).
+method             = "pitch"
+min_f0             = 220.0   # Hz
+max_f0             = 450.0   # Hz
+min_duration       = 1.5     # seconds
+max_duration       = 10.0    # seconds
+vad_threshold      = 0.5     # Silero VAD threshold
+min_in_range_ratio = 0.6     # fraction of voiced frames in [min_f0, max_f0]
+
+[asr]
+model        = "small"   # "tiny" | "base" | "small" | "medium" | "large-v3"
+language     = "hi"
+device       = "cuda"    # "cpu" if no GPU
+compute_type = "float16" # ignored on CPU
+beam_size    = 5
+min_chars    = 3         # drop transcripts shorter than this
+
+[fit]
+enabled         = true
+init_voice      = "hm_psi"   # warm-start from the closest Hindi voice
+parameterization = "shared"  # "shared" (single 256-d vec) or "per-length" ([510,256])
+epochs          = 50
+lr              = 1e-2
+out             = "voices/shinchan.pt"
+
+# Optional: actually fine-tune Kokoro's model weights (heavier, GPU recommended).
+# Disabled by default. Enable after [fit] gets you a usable seed voice.
+[finetune]
+enabled            = false
+preset             = "voice"   # "style_only" | "voice" | "full"
+epochs             = 20
+lr                 = 1e-4
+weight_decay       = 1e-6
+warmup_steps       = 100
+mel_weight         = 1.0
+stft_weight        = 0.5       # multi-res STFT magnitude loss (high-freq detail)
+train_style        = true      # also train the 256-d style vector alongside the model
+style_lr_scale     = 10.0      # style vector LR = lr * style_lr_scale
+parameterization   = "shared"
+init_voice         = "hm_psi"
+val_every_epochs   = 1
+save_every_epochs  = 5
+val_sentence       = "नमस्ते, मैं शिनचान हूँ।"
+out_dir            = "checkpoints/shinchan"
+final_pth          = "checkpoints/shinchan/kokoro-shinchan.pth"
+final_voice        = "voices/shinchan-finetuned.pt"
